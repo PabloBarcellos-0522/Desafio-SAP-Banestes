@@ -1,0 +1,155 @@
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+  body {
+    font-family: "Inter", sans-serif;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  /* Tooltip de Viabilidade */
+  .tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+  }
+  .tooltip .tooltiptext {
+    visibility: hidden;
+    width: 180px;
+    background-color: #1e293b;
+    color: #fff;
+    text-align: center;
+    border-radius: 12px;
+    padding: 10px;
+    position: absolute;
+    z-index: 100;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -90px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  }
+  .tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #1e293b transparent transparent transparent;
+  }
+  .tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* Donut Chart Logic */
+  .donut-chart {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: conic-gradient(var(--segments));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .donut-chart::after {
+    content: "";
+    width: 100px;
+    height: 100px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+  }
+
+  /* List.js Table Sorting */
+  th.sort {
+    position: relative;
+    padding-right: 25px !important;
+    cursor: pointer;
+  }
+  th.sort::after {
+    content: "↕";
+    position: absolute;
+    right: 8px;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+  }
+  th.sort.asc::after {
+    content: "↑";
+    color: #003399;
+    font-weight: bold;
+  }
+  th.sort.desc::after {
+    content: "↓";
+    color: #003399;
+    font-weight: bold;
+  }
+
+  /* List.js Pagination Styling (Dificil injetar tailwind direto no JS do List.js) */
+  .pagination {
+    display: flex;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+  }
+  .pagination li {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: all 0.2s;
+    border: 1px solid #e2e8f0;
+    background: white;
+  }
+  .pagination li a {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: #64748b;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+  .pagination li.active {
+    background-color: #003399;
+    border-color: #003399;
+  }
+  .pagination li.active a {
+    color: white;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 0.6s linear infinite;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+  }
+</style>

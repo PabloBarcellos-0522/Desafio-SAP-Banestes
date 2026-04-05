@@ -1,0 +1,96 @@
+<script>
+  /**
+   * Formata o campo de valor para moeda BRL em tempo real.
+   */
+  function formatarMoeda(campo) {
+    let v = campo.value.replace(/\D/g, "");
+    v = (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    campo.value = v;
+  }
+
+  /**
+   * Prepara o formulário para edição de um processo existente.
+   */
+  function prepararEdicao(id) {
+    const row = App.state.currentData.find((r) => r.ID == id);
+    if (!row) return;
+
+    App.data.inicializarDropdowns(() => {
+      toggleForm("edit");
+      App.ui.get("form-title").textContent = "Editar Processo: " + id;
+
+      const fields = {
+        Cliente: row.CLIENTE,
+        Produto: row.PRODUTO,
+        Unidade: row.UNIDADE,
+        "CÓD. DO CONTRATO": row["CÓD. DO CONTRATO"],
+        "VALOR DO CONTRATO": row["VALOR DO CONTRATO"],
+        "TIPO DE GARANTIA": row["TIPO DE GARANTIA"],
+        ANDAMENTO: row["ANDAMENTO"],
+        editMode: "true",
+        editProcessoID: id,
+      };
+
+      Object.entries(fields).forEach(([id, val]) => {
+        const el = App.ui.get(id);
+        if (el) el.value = val;
+      });
+
+      App.ui.get("form-container").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  /**
+   * Alterna a visibilidade do formulário entre Criar e Editar.
+   */
+  function toggleForm(mode = "create") {
+    const container = App.ui.get("form-container");
+    const isEdit = App.ui.get("editMode").value === "true";
+
+    if (mode === "create") {
+      App.ui.get("form-title").textContent = "Novo Processo";
+      App.ui.get("processoForm").reset();
+      App.ui.get("editMode").value = "false";
+      App.ui.get("editProcessoID").value = "";
+      App.data.inicializarDropdowns();
+    }
+
+    if (mode === "create" && !isEdit && !container.classList.contains("hidden")) {
+      container.classList.add("hidden");
+    } else {
+      container.classList.remove("hidden");
+    }
+  }
+
+  function cancelEdit() {
+    App.ui.get("form-container").classList.add("hidden");
+  }
+
+  /**
+   * Event Listener para submissão do formulário.
+   */
+  App.ui.get("processoForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    const data = {};
+    new FormData(e.target).forEach((v, k) => (data[k] = v));
+
+    const isEdit = App.ui.get("editMode").value === "true";
+    const action = isEdit ? "editarProcesso" : "adicionarProcesso";
+
+    App.ui.toggleLoading("btn-salvar", true, isEdit ? "Salvando" : "Criando");
+
+    google.script.run
+      .withSuccessHandler((res) => {
+        App.ui.notify(res);
+        e.target.reset();
+        cancelEdit();
+        App.data.carregar();
+        App.ui.toggleLoading("btn-salvar", false);
+      })
+      .withFailureHandler((err) => {
+        App.ui.notify(err.message, "error");
+        App.ui.toggleLoading("btn-salvar", false);
+      })
+      [action](data);
+  });
+</script>

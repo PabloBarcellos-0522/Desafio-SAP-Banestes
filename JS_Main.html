@@ -1,0 +1,433 @@
+<script>
+  /**
+   * App - Namespace Global da Aplicação
+   * Centraliza estado, lógica de UI e comunicação com o backend.
+   */
+  const App = {
+    state: {
+      currentData: [],
+      dropdownCache: { Cliente: [], Produto: [], Unidade: [] },
+      dropdownsLoaded: false,
+    },
+
+    /**
+     * Utilitários de UI
+     */
+    ui: {
+      get: (id) => document.getElementById(id),
+
+      toggleLoading: (btnId, isLoading, text) => {
+        const btn = App.ui.get(btnId);
+        const globalLoader = App.ui.get("global-loader");
+
+        if (globalLoader && (btnId === "btn-carregar" || btnId === "btn-salvar")) {
+          globalLoader.classList.toggle("hidden", !isLoading);
+        }
+
+        if (!btn) return;
+        btn.disabled = isLoading;
+        if (isLoading) {
+          btn.dataset.originalText = btn.innerHTML;
+          btn.innerHTML = `<span class="spinner"></span> ${text}...`;
+        } else {
+          btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+        }
+      },
+
+      notify: (msg, type = "success") => {
+        const container = App.ui.get("toast-container");
+        if (!container) return;
+
+        const toast = document.createElement("div");
+        const configs = {
+          success: "bg-[#00a859] border-[#00a859]/20 shadow-[#00a859]/20",
+          error: "bg-rose-600 border-rose-700/20 shadow-rose-900/20",
+          info: "bg-[#003399] border-[#003399]/20 shadow-[#003399]/20",
+          warning: "bg-amber-500 border-amber-600/20 shadow-amber-900/20",
+        };
+
+        const icons = {
+          success:
+            '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>',
+          error:
+            '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>',
+          info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+          warning:
+            '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
+        };
+
+        toast.className = `transform translate-y-10 opacity-0 transition-all duration-500 ease-out flex items-center gap-4 px-6 py-4 rounded-2xl text-white font-black text-xs shadow-2xl border pointer-events-auto min-w-[320px] ${configs[type] || configs.info}`;
+        toast.innerHTML = `
+          <div class="flex-shrink-0 bg-white/20 p-1.5 rounded-xl">${icons[type] || icons.info}</div>
+          <div class="flex-1 uppercase tracking-widest leading-tight">${msg}</div>
+        `;
+
+        container.appendChild(toast);
+
+        // Forçar reflow para animação
+        toast.offsetHeight;
+
+        // Mostrar
+        toast.classList.remove("translate-y-10", "opacity-0");
+
+        // Auto-remover após 4 segundos
+        setTimeout(() => {
+          toast.classList.add("translate-y-[-10px]", "opacity-0");
+          setTimeout(() => toast.remove(), 500);
+        }, 4500);
+      },
+
+      formatBRL: (val) => val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+
+      showSection: (id, el) => {
+        document
+          .querySelectorAll("section[id^='section-']")
+          .forEach((s) => s.classList.add("hidden"));
+        const target = App.ui.get("section-" + id);
+        if (target) target.classList.remove("hidden");
+
+        // Gerencia classes de destaque do menu lateral
+        document.querySelectorAll(".nav-item").forEach((n) => {
+          n.classList.remove(
+            "active",
+            "bg-[#00a859]",
+            "shadow-lg",
+            "shadow-[#00a859]/30",
+            "text-white",
+          );
+          n.classList.add("text-white/60", "hover:text-white", "hover:bg-white/5");
+        });
+
+        if (el) {
+          el.classList.add(
+            "active",
+            "bg-[#00a859]",
+            "shadow-lg",
+            "shadow-[#00a859]/30",
+            "text-white",
+          );
+          el.classList.remove("text-white/60", "hover:text-white", "hover:bg-white/5");
+        }
+
+        const titles = {
+          processos: { t: "Processos de Ajuizamento", s: "Gerenciamento de Fluxo Operacional" },
+          dashboard: { t: "Análise de Desempenho", s: "Visão Estratégica e Indicadores" },
+          clientes: { t: "Gestão de Clientes", s: "Base de Dados Relacional" },
+          unidades: { t: "Rede de Unidades", s: "Agências e Postos de Atendimento" },
+        };
+
+        const titleEl = App.ui.get("section-title");
+        const subtitleEl = App.ui.get("section-subtitle");
+        if (titles[id] && titleEl && subtitleEl) {
+          titleEl.innerText = titles[id].t;
+          subtitleEl.innerText = titles[id].s;
+        }
+      },
+
+      toggleFiltrosAvancados: () => {
+        const painel = App.ui.get("painel-filtros-avancados");
+        if (painel) painel.classList.toggle("hidden");
+      },
+    },
+
+    /**
+     * Lógica de Sincronização e Dados
+     */
+    data: {
+      carregar: () => {
+        App.ui.toggleLoading("btn-carregar", true, "Carregando");
+        google.script.run
+          .withSuccessHandler((dados) => {
+            App.state.currentData = dados;
+
+            // Funções globais de outros arquivos (Tabela)
+            if (typeof mostrar === "function") mostrar(dados);
+
+            App.dashboard.render(dados);
+
+            // Cargas secundárias
+            App.data.carregarReferenciais(dados);
+
+            App.ui.toggleLoading("btn-carregar", false);
+            App.ui.notify(`Sincronização concluída! ${dados.length} processos carregados.`);
+          })
+          .withFailureHandler((err) => {
+            App.ui.toggleLoading("btn-carregar", false);
+            App.ui.notify("Erro ao carregar dados: " + err.message, "error");
+          })
+          .getProcessos();
+      },
+
+      carregarReferenciais: (dados) => {
+        google.script.run
+          .withSuccessHandler((res) => {
+            window.rawClientes = res.data;
+            if (typeof renderizarTabelaClientes === "function")
+              renderizarTabelaClientes(res.data, dados);
+          })
+          .getClientes();
+
+        google.script.run
+          .withSuccessHandler((res) => {
+            window.rawUnidades = res.data;
+            if (typeof renderizarTabelaUnidades === "function")
+              renderizarTabelaUnidades(res.data, dados);
+          })
+          .getUnidades();
+      },
+
+      inicializarDropdowns: (callback) => {
+        if (App.state.dropdownsLoaded) {
+          if (callback) callback();
+          return;
+        }
+
+        let calls = 0;
+        const check = () => {
+          if (++calls === 3) {
+            App.state.dropdownsLoaded = true;
+            if (callback) callback();
+          }
+        };
+
+        const onSuccess = (key, targetIds) => (items) => {
+          App.state.dropdownCache[key] = items;
+          targetIds.forEach((id) => App.data.popularSelect(id, items));
+          check();
+        };
+
+        google.script.run
+          .withSuccessHandler(onSuccess("Cliente", ["Cliente"]))
+          .getClientesForDropdown();
+        google.script.run
+          .withSuccessHandler(onSuccess("Produto", ["Produto"]))
+          .getProdutosForDropdown();
+        google.script.run
+          .withSuccessHandler(onSuccess("Unidade", ["Unidade"]))
+          .getUnidadesForDropdown();
+      },
+
+      popularSelect: (id, items) => {
+        const s = App.ui.get(id);
+        if (!s) return;
+        const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+        s.innerHTML = `<option value="">${id.startsWith("filtro") ? "Todas" : "Selecione..."}</option>`;
+        sorted.forEach((i) =>
+          s.appendChild(
+            Object.assign(document.createElement("option"), { value: i.name, text: i.name }),
+          ),
+        );
+      },
+
+      excluirProcesso: (id) => {
+        if (confirm(`Deseja realmente excluir o processo ${id}?`)) {
+          google.script.run
+            .withSuccessHandler((r) => {
+              App.ui.notify(r, "success");
+              App.data.carregar();
+            })
+            .withFailureHandler((err) => {
+              App.ui.notify("Erro ao excluir: " + err.message, "error");
+            })
+            .excluirProcesso(id);
+        }
+      },
+    },
+
+    /**
+     * Módulo de Dashboard
+     */
+    dashboard: {
+      render: (dados) => {
+        App.dashboard.renderKPIs(dados);
+        App.dashboard.renderStatusChart(dados);
+        App.dashboard.renderTopTables(dados);
+        App.dashboard.renderGarantias(dados);
+        App.dashboard.renderPrioridades(dados);
+        App.dashboard.renderAlertas(dados);
+      },
+
+      renderKPIs: (dados) => {
+        const total = dados.length;
+        const abertos = dados.filter((p) => p.ANDAMENTO !== "FINALIZADO").length;
+        const valorTotal = dados.reduce((sum, p) => sum + (p.VALOR_SORT || 0), 0);
+        const ticketMedio = total > 0 ? valorTotal / total : 0;
+
+        App.ui.get("dash-total").innerText = total;
+        App.ui.get("dash-aberto").innerText = abertos;
+        App.ui.get("dash-ticket").innerText = App.ui.formatBRL(ticketMedio);
+        App.ui.get("dash-valor-total").innerText = App.ui.formatBRL(valorTotal);
+      },
+
+      renderStatusChart: (dados) => {
+        const total = dados.length;
+        const container = App.ui.get("status-container");
+        const statusList = ["INICIADO", "ANALISANDO", "PENDENTE", "PARALISADO", "FINALIZADO"];
+        const colors = {
+          INICIADO: "#94a3b8",
+          ANALISANDO: "#3b82f6",
+          PENDENTE: "#f59e0b",
+          PARALISADO: "#ef4444",
+          FINALIZADO: "#10b981",
+        };
+
+        let segments = [];
+        let angle = 0;
+        statusList.forEach((s) => {
+          const qtd = dados.filter((p) => p.ANDAMENTO.toUpperCase() === s).length;
+          const pct = total > 0 ? (qtd / total) * 100 : 0;
+          if (pct > 0) segments.push(`${colors[s]} ${angle}deg ${angle + (pct / 100) * 360}deg`);
+          angle += (pct / 100) * 360;
+        });
+
+        container.innerHTML = `
+          <div class="donut-chart scale-125 shadow-2xl border-4 border-white" style="--segments: ${segments.join(", ") || "#f1f5f9 0 360deg"}">
+            <div class="relative z-10 text-center">
+              <p class="text-4xl font-black text-slate-800 leading-none tracking-tighter">${total}</p>
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Total</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-x-12 gap-y-5 mt-16 max-w-max mx-auto">
+            ${statusList
+              .map((s) => {
+                const qtd = dados.filter((p) => p.ANDAMENTO.toUpperCase() === s).length;
+                return `<div class="flex items-center gap-3"><div class="w-3 h-3 rounded-full shadow-md" style="background: ${colors[s]}">
+                  </div><span class="text-[11px] font-bold text-slate-600 uppercase tracking-tight">${s}: ${qtd}</span></div>`;
+              })
+              .join("")}
+          </div>`;
+      },
+
+      renderTopTables: (dados) => {
+        // Top 5 Oportunidades
+        const topBody = App.ui.get("top-processos-body");
+        const pPeso = { ALTA: 3, MÉDIA: 2, BAIXA: 1 };
+        topBody.innerHTML = [...dados]
+          .sort(
+            (a, b) =>
+              (pPeso[b.PRIORIDADE] || 0) - (pPeso[a.PRIORIDADE] || 0) ||
+              b.VALOR_SORT - a.VALOR_SORT,
+          )
+          .slice(0, 5)
+          .map(
+            (p) => `
+            <tr class="border-b border-slate-50 hover:bg-blue-50/50 transition-colors cursor-pointer group" onclick="prepararEdicao('${p.ID}')">
+              <td class="py-4 font-bold text-[#003399] group-hover:underline text-sm tracking-tighter">${p.ID}</td>
+              <td class="py-4 text-center"><span class="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${p.PRIORIDADE_COLOR} shadow-sm">${p.PRIORIDADE}</span></td>
+              <td class="py-4 truncate max-w-[180px] text-slate-800 font-bold text-xs uppercase tracking-tighter">${p.CLIENTE}</td>
+              <td class="py-4 text-right font-black text-[#003399] text-sm">${p["VALOR DO CONTRATO"]}</td>
+            </tr>`,
+          )
+          .join("");
+
+        // Top 5 Clientes
+        const cliMap = {};
+        dados.forEach((p) => (cliMap[p.CLIENTE] = (cliMap[p.CLIENTE] || 0) + 1));
+        App.ui.get("top-clientes-body").innerHTML = Object.entries(cliMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(
+            ([nome, qtd]) => `
+            <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+              <td class="py-4 font-bold text-slate-700 text-xs uppercase tracking-tighter">${nome}</td>
+              <td class="py-4 text-center"><span class="font-black text-[#003399] text-xl">${qtd}</span><span class="text-[10px] text-slate-400 ml-2 uppercase font-black tracking-widest opacity-50">processos</span></td>
+              <td class="py-4 text-right"><span class="text-[12px] bg-[#00a859] text-white font-black px-3 py-1 rounded-full shadow-lg shadow-[#00a859]/20">${Math.round((qtd / dados.length) * 100)}%</span></td>
+            </tr>`,
+          )
+          .join("");
+      },
+
+      renderGarantias: (dados) => {
+        const container = App.ui.get("garantia-detalhe-container");
+        const colorPalette = ["#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f59e0b", "#10b981"];
+        const garantias = [...new Set(dados.map((p) => p["TIPO DE GARANTIA"]))];
+
+        container.innerHTML = garantias
+          .map((g, i) => {
+            const qtd = dados.filter((p) => p["TIPO DE GARANTIA"] === g).length;
+            const pct = Math.round((qtd / dados.length) * 100);
+            if (qtd === 0) return "";
+            return `<div>
+            <div class="flex justify-between text-[10px] font-bold text-slate-500 mb-2 uppercase"><span>${g}</span><span>${qtd} (${pct}%)</span></div>
+            <div class="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50"><div class="h-full rounded-full transition-all duration-1000 shadow-xl border-r-2 border-white/20" style="width: ${pct}%; background: ${colorPalette[i % colorPalette.length]}"></div></div>
+          </div>`;
+          })
+          .join("");
+      },
+
+      renderPrioridades: (dados) => {
+        const container = App.ui.get("prioridade-container");
+        const cfg = {
+          ALTA: {
+            color: "bg-rose-50 text-rose-600 border-rose-100",
+            bar: "bg-rose-500 shadow-rose-200",
+          },
+          MÉDIA: {
+            color: "bg-amber-50 text-amber-600 border-amber-100",
+            bar: "bg-amber-500 shadow-amber-200",
+          },
+          BAIXA: {
+            color: "bg-slate-50 text-slate-500 border-slate-100",
+            bar: "bg-slate-400 shadow-slate-200",
+          },
+        };
+        container.innerHTML = ["ALTA", "MÉDIA", "BAIXA"]
+          .map((level) => {
+            const qtd = dados.filter((p) => p.PRIORIDADE === level).length;
+            const pct = Math.round((qtd / dados.length) * 100) || 0;
+            return `
+            <div class="flex flex-col justify-center items-center rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl border-2 ${cfg[level].color} shadow-sm bg-white/50">
+              <p class="text-[11px] font-black uppercase tracking-[0.25em] mb-3 opacity-70">${level}</p>
+              <p class="text-4xl font-black mb-1 tracking-tighter">${qtd}</p>
+              <p class="text-[15px] font-black opacity-40 uppercase tracking-widest">${pct}% da base</p>
+              <div class="w-full h-2 mt-6 rounded-full bg-slate-200/50 overflow-hidden shadow-inner"><div class="h-full shadow-lg transition-all duration-700 ${cfg[level].bar}" style="width: ${pct}%"></div></div>
+            </div>`;
+          })
+          .join("");
+      },
+
+      renderAlertas: (dados) => {
+        const container = App.ui.get("alertas-container");
+        const paralisados = dados.filter((p) => p.ANDAMENTO === "PARALISADO").length;
+        const now = new Date().getTime();
+        const abertos = dados.filter(
+          (p) => p.ANDAMENTO !== "FINALIZADO" && p["DATA DA CRIAÇÃO_SORT"],
+        );
+        const mediaDias =
+          abertos.length > 0
+            ? Math.round(
+                abertos.reduce((s, p) => s + (now - p["DATA DA CRIAÇÃO_SORT"]), 0) /
+                  (abertos.length * 86400000),
+              )
+            : 0;
+
+        let html = "";
+        if (paralisados > 0)
+          html += `<div class="flex items-center gap-4 p-4 bg-rose-50 text-rose-700 rounded-2xl border-2 border-rose-100 shadow-sm animate-pulse"><span class="text-2xl">🚨</span><span class="font-black text-[11px] uppercase tracking-widest leading-tight">${paralisados} processos paralisados no fluxo</span></div>`;
+        if (mediaDias > 30)
+          html += `<div class="flex items-center gap-4 p-4 bg-amber-50 text-amber-700 rounded-2xl border-2 border-amber-100 shadow-sm"><span class="text-2xl">⏱️</span><span class="font-black text-[11px] uppercase tracking-widest leading-tight">Atenção: Tempo médio crítico de ${mediaDias} dias</span></div>`;
+
+        container.innerHTML =
+          html ||
+          "<p class='text-slate-400 italic py-6 text-center font-black text-[11px] uppercase tracking-widest opacity-50'>Nenhum alerta crítico no momento</p>";
+        App.ui.get("dash-tempo-medio").innerText = mediaDias;
+      },
+    },
+  };
+
+  /**
+   * Atalhos globais para manter compatibilidade com chamadas inline no HTML
+   */
+  const carregar = App.data.carregar;
+  const inicializarDropdowns = App.data.inicializarDropdowns;
+  const deleteProcesso = App.data.excluirProcesso;
+  const toggleLoading = App.ui.toggleLoading;
+  const showSection = App.ui.showSection;
+  const toggleFiltrosAvancados = App.ui.toggleFiltrosAvancados;
+
+  window.onload = () => {
+    App.data.carregar();
+    App.data.inicializarDropdowns();
+    App.ui.showSection("processos", document.querySelector(".nav-item"));
+  };
+</script>

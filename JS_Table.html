@@ -1,0 +1,331 @@
+<script>
+  /**
+   * Renderiza a tabela principal de processos com foco em legibilidade e peso visual.
+   * @param {Object[]} dados Lista de processos (DTOs).
+   */
+  function mostrar(dados) {
+    const container = App.ui.get("tabela-processos");
+    if (!dados || dados.length === 0) {
+      container.innerHTML =
+        "<p class='p-10 text-center text-slate-400 font-black text-sm italic uppercase tracking-widest'>Nenhum processo encontrado para os filtros selecionados.</p>";
+      return;
+    }
+
+    const colunas = [
+      { label: "Ref. / Contrato", sort: "ID" },
+      { label: "Cliente / Unidade", sort: "CLIENTE" },
+      { label: "Produto", sort: "PRODUTO" },
+      { label: "Valor do Contrato", sort: "VALOR-DO-CONTRATO" },
+      { label: "Prioridade", sort: "PRIORIDADE" },
+      { label: "Status / Atualização", sort: "ANDAMENTO" },
+    ];
+
+    let html = `
+      <table class="w-full border-collapse">
+        <thead>
+          <tr class="bg-slate-50/80 border-b-2 border-slate-100">
+            ${colunas.map((c) => `<th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="${c.sort}">${c.label}</th>`).join("")}
+            <th class="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="list divide-y divide-slate-50">`;
+
+    dados.forEach((row) => {
+      const isViable = (row.VALOR_SORT || 0) >= 15000;
+      const hasGarantia = row["TIPO DE GARANTIA"] && row["TIPO DE GARANTIA"] !== "NENHUMA";
+
+      // Lógica de Prioridade (Visual)
+      if (isViable && hasGarantia) {
+        row.PRIORIDADE = "ALTA";
+        row.PRIORIDADE_COLOR = "bg-rose-50 text-rose-600 border-rose-100 shadow-sm";
+      } else if (isViable || hasGarantia) {
+        row.PRIORIDADE = "MÉDIA";
+        row.PRIORIDADE_COLOR = "bg-amber-50 text-amber-600 border-amber-100 shadow-sm";
+      } else {
+        row.PRIORIDADE = "BAIXA";
+        row.PRIORIDADE_COLOR = "bg-slate-50 text-slate-500 border-slate-200 shadow-sm";
+      }
+
+      const statusColors = {
+        FINALIZADO: "bg-emerald-100 text-emerald-700 shadow-md shadow-emerald-900/10",
+        PARALISADO: "bg-rose-100 text-rose-700 shadow-md shadow-rose-900/10",
+        PENDENTE: "bg-amber-100 text-amber-700 shadow-md shadow-amber-900/10",
+        ANALISANDO: "bg-blue-100 text-blue-700 shadow-md shadow-blue-900/10",
+        INICIADO: "bg-slate-200 text-slate-600 shadow-md shadow-slate-900/10",
+      };
+      const statusValue = (row.ANDAMENTO || "").trim().toUpperCase();
+      const sColor = statusColors[statusValue] || statusColors.INICIADO;
+
+      html += `
+        <tr class="hover:bg-blue-50/50 transition-all duration-200 group cursor-default">
+          <td class="py-4 pl-6 ID">
+            <div class="font-bold text-[#003399] text-sm tracking-tighter uppercase">${row.ID}</div>
+            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Contrato: ${row["CÓD. DO CONTRATO"]}</div>
+            <span class="hidden CONTRATO">${row["CÓD. DO CONTRATO"]}</span>
+          </td>
+          <td class="py-4 pl-6 CLIENTE max-w-[280px]">
+            <div class="font-bold text-slate-800 text-sm uppercase tracking-tight truncate" title="${row.CLIENTE}">${row.CLIENTE}</div>
+            <div class="text-[10px] text-[#003399] font-black uppercase tracking-[0.1em] mt-1 opacity-70 UNIDADE">${row.UNIDADE}</div>
+          </td>
+          <td class="py-4 pl-6 PRODUTO">
+            <span class="text-[11px] text-slate-700 font-bold bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm uppercase tracking-tighter">${row.PRODUTO}</span>
+          </td>
+          <td class="py-4 pl-6 VALOR-DO-CONTRATO" data-order="${row.VALOR_SORT}">
+            <div class="flex items-center gap-2 font-black text-sm ${isViable ? "text-slate-900" : "text-rose-600"} tracking-tighter">
+              ${row["VALOR DO CONTRATO"]}
+              ${!isViable ? `<div class="tooltip"><svg class="w-4 h-4 text-rose-400" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"></path></svg><span class="tooltiptext font-black uppercase text-[10px]">Dívida inferior a R$ 15k</span></div>` : ""}
+            </div>
+          </td>
+          <td class="py-4 pl-6 PRIORIDADE">
+            <span class="px-3 py-1 text-[9px] font-black rounded-lg border-2 uppercase tracking-[0.2em] ${row.PRIORIDADE_COLOR}">${row.PRIORIDADE}</span>
+          </td>
+          <td class="py-4 pl-6 ANDAMENTO">
+            <span class="px-4 py-1.5 text-[10px] font-black rounded-full uppercase tracking-widest ${sColor}">${row.ANDAMENTO}</span>
+            <div class="text-xs text-slate-500 mt-2 font-black uppercase tracking-tight flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+              Atu: <span class="text-slate-800">${row["DATA DA ATUALIZAÇÃO"]}</span>
+            </div>
+            <span class="hidden STATUS-TEXT">${statusValue}</span>
+            <span class="hidden GARANTIA">${row["TIPO DE GARANTIA"]}</span>
+            <span class="hidden DATA-CRIACAO" data-timestamp="${row["DATA DA CRIAÇÃO_SORT"]}">${row["DATA DA CRIAÇÃO"]}</span>
+          </td>
+          <td class="py-4 pl-6 text-center">
+            <div class="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+              <button onclick="prepararEdicao('${row.ID}')" class="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-lg rounded-2xl transition-all border border-transparent hover:border-indigo-100" title="Editar">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+              </button>
+              <button onclick="deleteProcesso('${row.ID}')" class="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-white hover:shadow-lg rounded-2xl transition-all border border-transparent hover:border-rose-100" title="Excluir">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+
+    initListJS(dados);
+  }
+
+  function initListJS(dados) {
+    const valueNames = [
+      "ID",
+      "CLIENTE",
+      "PRODUTO",
+      "UNIDADE",
+      "CONTRATO",
+      "GARANTIA",
+      "PRIORIDADE",
+      "ANDAMENTO",
+      "STATUS-TEXT",
+      { name: "VALOR-DO-CONTRATO", attr: "data-order" },
+      { name: "DATA-CRIACAO", attr: "data-timestamp" },
+    ];
+
+    // Reseta elementos de paginação
+    const wrapper = App.ui.get("tabela-processos-wrapper");
+    if (wrapper) {
+      const pagUl = wrapper.querySelector(".pagination");
+      if (pagUl) pagUl.innerHTML = "";
+    }
+
+    window.processoList = new List("tabela-processos-wrapper", {
+      valueNames,
+      page: 15,
+      pagination: { innerWindow: 3, left: 2, right: 2 },
+    });
+
+    atualizarDropdownsFiltro(dados);
+    updatePaginationInfo(window.processoList);
+    window.processoList.on("updated", (list) => updatePaginationInfo(list));
+  }
+
+  function updatePaginationInfo(list) {
+    const infoEl = App.ui.get("pagination-info");
+    const countEl = App.ui.get("contador-processos");
+    if (!infoEl) return;
+
+    const total = list.matchingItems.length;
+    const start = total === 0 ? 0 : list.i;
+    const end = total === 0 ? 0 : start + list.visibleItems.length - 1;
+
+    infoEl.innerHTML =
+      total === 0
+        ? "Nenhum registro"
+        : `Mostrando <span class='text-slate-800 font-black'>${start} a ${end}</span> de <span class='text-slate-800 font-black'>${total}</span>`;
+    if (countEl) countEl.innerText = `${total} processos`;
+  }
+
+  function filtrarProcessos() {
+    if (!window.processoList) return;
+    const getVal = (id) => App.ui.get(id)?.value || "";
+
+    const search = getVal("filtro-busca").toLowerCase();
+    const status = getVal("filtro-status");
+    const unidade = getVal("filtro-unidade");
+    const produto = getVal("filtro-produto");
+    const garantia = getVal("filtro-garantia");
+    const valMin = parseFloat(getVal("filtro-valor-min")) || 0;
+    const valMax = parseFloat(getVal("filtro-valor-max")) || Infinity;
+
+    const dataIniStr = getVal("filtro-data-ini");
+    const dataFimStr = getVal("filtro-data-fim");
+    const dataIni = dataIniStr ? new Date(dataIniStr + "T00:00:00").getTime() : 0;
+    const dataFim = dataFimStr ? new Date(dataFimStr + "T23:59:59").getTime() : Infinity;
+
+    window.processoList.filter((item) => {
+      const v = item.values();
+      const mBusca =
+        !search ||
+        v.ID.toLowerCase().includes(search) ||
+        v.CLIENTE.toLowerCase().includes(search) ||
+        v.CONTRATO.toLowerCase().includes(search);
+      const mStatus = !status || v["STATUS-TEXT"] === status;
+      const mUnidade = !unidade || v.UNIDADE === unidade;
+      const mProduto = !produto || v.PRODUTO === produto;
+      const mGarantia = !garantia || v.GARANTIA === garantia;
+
+      const valor = parseFloat(v["VALOR-DO-CONTRATO"]) || 0;
+      const mValor = valor >= valMin && valor <= valMax;
+
+      const timestamp = parseInt(v["DATA-CRIACAO"]) || 0;
+      const mData = timestamp >= dataIni && timestamp <= dataFim;
+
+      return mBusca && mStatus && mUnidade && mProduto && mGarantia && mValor && mData;
+    });
+  }
+
+  function limparFiltros() {
+    [
+      "filtro-busca",
+      "filtro-status",
+      "filtro-unidade",
+      "filtro-produto",
+      "filtro-garantia",
+      "filtro-prioridade",
+      "filtro-valor-min",
+      "filtro-valor-max",
+      "filtro-data-ini",
+      "filtro-data-fim",
+    ].forEach((id) => {
+      const el = App.ui.get(id);
+      if (el) el.value = "";
+    });
+
+    if (window.processoList) {
+      window.processoList.filter();
+      window.processoList.sort("ID", { order: "asc" });
+    }
+  }
+
+  function atualizarDropdownsFiltro(dados) {
+    const unidades = [...new Set(dados.map((d) => d.UNIDADE))]
+      .filter(Boolean)
+      .sort()
+      .map((name) => ({ name }));
+    const produtos = [...new Set(dados.map((d) => d.PRODUTO))]
+      .filter(Boolean)
+      .sort()
+      .map((name) => ({ name }));
+    App.data.popularSelect("filtro-unidade", unidades);
+    App.data.popularSelect("filtro-produto", produtos);
+  }
+
+  // --- TABELAS DE CADASTRO (CLIENTES E UNIDADES) ---
+
+  function renderizarTabelaClientes(clientes, processos) {
+    const container = App.ui.get("tabela-clientes");
+    if (!container) return;
+
+    let html = `
+      <table class="w-full border-collapse">
+        <thead>
+          <tr class="bg-slate-50/80 border-b-2 border-slate-100">
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="CLI-ID">ID</th>
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="CLI-NOME">Nome do Cliente</th>
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="CLI-DOC">Documento (CPF/CNPJ)</th>
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="CLI-TIPO">Tipo</th>
+            <th class="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="CLI-COUNT">Qtd Processos</th>
+          </tr>
+        </thead>
+        <tbody class="list divide-y divide-slate-50">`;
+
+    clientes.forEach((c) => {
+      const nome = c[1];
+      const doc = c[2];
+      const count = App.state.currentData.filter((p) => p.CLIENTE === nome).length;
+      const isPJ = doc.includes("/") || doc.replace(/\D/g, "").length > 11;
+
+      html += `
+        <tr class="hover:bg-blue-50/50 transition-all duration-200 group">
+          <td class="py-4 pl-6 font-bold text-[#003399] text-sm CLI-ID uppercase tracking-tighter">${c[0]}</td>
+          <td class="py-4 pl-6 font-bold text-slate-800 text-sm CLI-NOME uppercase tracking-tight">${nome}</td>
+          <td class="py-4 pl-6 text-slate-500 font-black text-xs CLI-DOC">${doc}</td>
+          <td class="py-4 pl-6"><span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm CLI-TIPO ${isPJ ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}">${isPJ ? "Pessoa Jurídica" : "Pessoa Física"}</span></td>
+          <td class="py-4 pl-6 text-center font-black text-[#003399] text-xl CLI-COUNT tracking-tighter">${count}</td>
+        </tr>`;
+    });
+
+    container.innerHTML = html + "</tbody></table>";
+    window.clienteList = new List("tabela-clientes-wrapper", {
+      valueNames: ["CLI-ID", "CLI-NOME", "CLI-DOC", "CLI-TIPO", "CLI-COUNT"],
+      page: 15,
+      pagination: { innerWindow: 3, left: 2, right: 2 },
+    });
+  }
+
+  function renderizarTabelaUnidades(unidades, processos) {
+    const container = App.ui.get("tabela-unidades");
+    if (!container) return;
+
+    let html = `
+      <table class="w-full border-collapse">
+        <thead>
+          <tr class="bg-slate-50/80 border-b-2 border-slate-100">
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="UNI-ID">ID</th>
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="UNI-CID">Código (CID)</th>
+            <th class="py-5 px-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="UNI-NOME">Nome da Unidade / Agência</th>
+            <th class="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] sort" data-sort="UNI-COUNT">Qtd Processos</th>
+          </tr>
+        </thead>
+        <tbody class="list divide-y divide-slate-50">`;
+
+    unidades.forEach((u) => {
+      const nome = u[2];
+      const count = App.state.currentData.filter((p) => p.UNIDADE === nome).length;
+      html += `
+        <tr class="hover:bg-blue-50/50 transition-all duration-200 group">
+          <td class="py-4 pl-6 font-bold text-[#003399] text-sm UNI-ID uppercase tracking-tighter">${u[0]}</td>
+          <td class="py-4 pl-6 font-black text-slate-500 text-xs UNI-CID">${u[1]}</td>
+          <td class="py-4 pl-6 font-bold text-slate-800 text-sm UNI-NOME uppercase tracking-tight">${nome}</td>
+          <td class="py-4 pl-6 text-center font-black text-[#003399] text-xl UNI-COUNT tracking-tighter">${count}</td>
+        </tr>`;
+    });
+
+    container.innerHTML = html + "</tbody></table>";
+    window.unidadeList = new List("tabela-unidades-wrapper", {
+      valueNames: ["UNI-ID", "UNI-CID", "UNI-NOME", "UNI-COUNT"],
+      page: 15,
+      pagination: { innerWindow: 3, left: 2, right: 2 },
+    });
+  }
+
+  function filtrarClientes() {
+    const term = App.ui.get("filtro-busca-clientes").value.toLowerCase();
+    if (window.clienteList) window.clienteList.search(term);
+  }
+  function filtrarUnidades() {
+    const term = App.ui.get("filtro-busca-unidades").value.toLowerCase();
+    if (window.unidadeList) window.unidadeList.search(term);
+  }
+
+  // Listener para prevenir reload em paginação
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (e.target.tagName === "A" && e.target.closest(".pagination")) e.preventDefault();
+    },
+    true,
+  );
+</script>
